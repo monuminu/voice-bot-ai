@@ -1,0 +1,227 @@
+{% extends "templates/base.html.jinja" %}
+
+{% block title %}
+Claim ({{ call.initiate.phone_number }})
+{% endblock %}
+
+{% block content %}
+<!-- Call me button -->
+{% include "templates/call_me.html.jinja" %}
+
+<!-- Top introduction -->
+<header class="col-span-full mx-4 mb-4">
+  <div class="my-4 text-neutral-600 dark:text-neutral-400">
+    <a class="hover:underline" href="/report?phone_number={{ call.initiate.phone_number | quote_plus }}">
+      ⬅&nbsp;&nbsp;Go back to your call history
+    </a>
+  </div>
+
+  <h1>Hello {{ (call.claim.policyholder_name | title) if call.claim.policyholder_name else '' }}&nbsp;&nbsp;👋🏻</h1>
+  <p class="text-2xl">Your claim {{ ('about ' ~ call.synthesis.short | lower) if call.synthesis.short }} is being processed.</p>
+</header>
+
+<!-- Long synthesis -->
+<div class="col-span-full mb-8">
+  <div class="lg:rounded-md bg-gradient-to-r from-pink-300/30 dark:from-pink-700/30 to-violet-300/30 dark:to-violet-700/30 lg:ring-1 ring-transparent -mx-4 -my-2 px-8 py-6 space-y-4">
+    <h2 class="text-lg">Summary</h2>
+    {% if not call.synthesis.long %}
+    <p class="text-neutral-600 dark:text-neutral-400">No summary yet.</p>
+    {% else %}
+    <div class="space-y-2">
+      {{ ((call.synthesis.long | markdown) or '<p class="text-neutral-600 dark:text-neutral-400">Error while rendering the summary.</p>') | safe }}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Conversation -->
+<div class="col-start-1 col-end-5 order-last lg:order-none">
+  <div class="p-4 space-y-4 rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60">
+    <h2 class="text-lg">💬&nbsp;&nbsp;Conversation</h2>
+
+    <!-- Agent and customer -->
+    <div class="overflow-hidden space-y-6">
+      {% for message in call.messages | sort(attribute='created_at') %}
+        {% if not (message.action == 'talk' and not message.content) %}
+        {% set name = bot_name if message.persona == 'assistant' else (call.claim.policyholder_name or 'Customer') %}
+        <div class="flex flex-row">
+          <div class="basis-6 relative self-stretch">
+            <div class="absolute top-0 left-0 w-full h-full -z-10">
+              <div class="h-screen mx-auto w-0.5 bg-neutral-200/60 dark:bg-neutral-800/60"></div>
+            </div>
+            <div class="py-1.5 bg-white dark:bg-neutral-900">
+              {% if message.persona == 'assistant' %}
+              <div
+                class="rounded-full h-2 w-2 mx-auto bg-neutral-200/60 dark:bg-neutral-800/60 ring-1 ring-neutral-300 dark:ring-neutral-700"
+              ></div>
+              {% else %}
+              <div
+                class="rounded-full h-2 w-2 mx-auto bg-blue-200 dark:bg-blue-800 ring-1 ring-blue-400 dark:ring-blue-600"
+              ></div>
+              {% endif %}
+            </div>
+          </div>
+          <div class="basis-full space-y-2 px-4 py-0.5">
+            <div class="flex flex-row justify-between content-center text-xs">
+              <div>
+                {{ name | title }}
+                <span class="text-neutral-600 dark:text-neutral-400">
+                  {% if message.action == 'call' %}
+                  called
+                  {% elif message.action == 'hangup' %}
+                  hung up
+                  {% elif message.action == 'sms' %}
+                  sent a SMS
+                  {% elif message.action == 'talk' %}
+                  said
+                  {% endif %}
+                </span>
+              </div>
+              <div class="text-neutral-600 dark:text-neutral-400">
+                {{ message.created_at.astimezone(call.tz()).strftime('%a %d %b %Y, %H:%M (%Z)') }}
+              </div>
+            </div>
+            {% if message.content %}
+            <p class="text-neutral-600 dark:text-neutral-400">{{ message.content }}</p>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+      {% else %}
+      <p class="text-neutral-600 dark:text-neutral-400">No message yet.</p>
+      {% endfor %}
+    </div>
+
+    <!-- TODO: Add a action for a new phone call -->
+  </div>
+</div>
+
+<div class="col-start-5 col-end-7 space-y-4">
+  <!-- Reminders -->
+  <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60 p-4 space-y-4">
+    <h2 class="text-lg">⏰&nbsp;&nbsp;Reminders</h2>
+
+    {% if not call.reminders %}
+    <p class="text-neutral-600 dark:text-neutral-400">No reminder yet.</p>
+    {% else %}
+    <div class="space-y-6">
+      {% for reminder in call.reminders | sort(attribute='due_date_time') %}
+      <div>
+        <div class="text-xs">
+          {{ reminder.owner | title }}<span class="text-neutral-600 dark:text-neutral-400">, {{ reminder.due_date_time.astimezone(call.tz()).strftime('%a %d %b %Y, %H:%M (%Z)') }}</span>
+        </div>
+        <p class="text-neutral-600 dark:text-neutral-400">{{ reminder.title | capitalize }}</p>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Next actions -->
+  <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60 p-4 space-y-4">
+    <h2 class="text-lg">📥&nbsp;&nbsp;Next action</h2>
+
+    {% if not call.next %}
+    <p class="text-neutral-600 dark:text-neutral-400">No further action for the moment.</p>
+    {% else %}
+    <ul>
+      {% for action in next_actions | sort %}
+      {% if action.value == call.next.action.value %}
+      <li>
+        {{ action.value | replace("_", " " ) | capitalize }}
+      </li>
+      {% else %}
+      <li class="text-xs text-neutral-600 dark:text-neutral-400">
+        {{ action.value | replace("_", " " ) | capitalize }}
+      </li>
+      {% endif %}
+      {% endfor %}
+    </ul>
+    {% endif %}
+    <p class="text-neutral-600 dark:text-neutral-400">
+      {{ call.next.justification }}
+    </p>
+  </div>
+
+  <!-- Analysis -->
+  <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60">
+    <h2 class="text-lg px-4 pt-4">🔎&nbsp;&nbsp;Analysis</h2>
+
+    {% if not call.synthesis %}
+    <p class="p-4 text-neutral-600 dark:text-neutral-400">No analysis for the moment.</p>
+    {% else %}
+    <table class="table-auto w-full">
+      <tbody>
+        {%
+          set details = [
+            {
+              'title': 'Satisfaction',
+              'value': ('🔴' if call.synthesis.satisfaction == 'terrible' else '🟠' if call.synthesis.satisfaction == 'low' else '🟢' if call.synthesis.satisfaction == 'partial' else '❤️' if call.synthesis.satisfaction == 'high' else '⚪️' if call.synthesis.satisfaction == 'unknow' ) ~ ' (' ~ call.synthesis.satisfaction.value ~ ')'
+            },
+            {
+              'title': 'Improvement',
+              'value': call.synthesis.improvement_suggestions
+            }
+          ]
+        %}
+        <!-- Disable shadow to avoid overlapping with the table border -->
+        {% for detail in details %}
+        <tr {% if not loop.last %}class="border-b border-neutral-200/60 dark:border-neutral-700/60"{% endif %}>
+          <td class="p-4 text-neutral-600 dark:text-neutral-400">{{ detail.title }}</td>
+          <td class="p-4">{{ detail.value }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+
+  <!-- Details -->
+  <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60">
+    <h2 class="text-lg px-4 pt-4">📁&nbsp;&nbsp;Details</h2>
+    <table class="table-auto w-full">
+      <tbody>
+        {%
+          set details = [
+            {
+              'title': 'Date',
+              'value': call.claim.incident_date_time.strftime('%a %d %b %Y, %H:%M (%Z)') if call.claim.incident_date_time else 'N/A'
+            },
+            {
+              'title': 'Location',
+              'value': call.claim.incident_location or 'N/A'
+            },
+            {
+              'title': 'Policy',
+              'value': call.claim.policy_number or 'N/A'
+            },
+            {
+              'title': 'Contact',
+              'value': (call.claim.policyholder_email or 'N/A') ~ ', ' ~ (call.claim.policyholder_phone or 'N/A')
+            },
+            {
+              'title': 'Phone used',
+              'value': call.initiate.phone_number or 'N/A'
+            }
+          ]
+        %}
+        <!-- Disable shadow to avoid overlapping with the table border -->
+        {% for detail in details %}
+        <tr {% if not loop.last %}class="border-b border-neutral-200/60 dark:border-neutral-700/60"{% endif %}>
+          <td class="p-4 text-neutral-600 dark:text-neutral-400">{{ detail.title }}</td>
+          <td class="p-4">{{ detail.value }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Task -->
+  <div class="rounded-md lg:ring-1 ring-neutral-200/60 dark:ring-neutral-700/60 p-4 space-y-4">
+    <h2 class="text-lg">🫡&nbsp;&nbsp;Task</h2>
+    <p class="text-neutral-600 dark:text-neutral-400">
+      {{ call.initiate.task }}
+    </p>
+  </div>
+</div>
+{% endblock %}
